@@ -65,15 +65,13 @@ int execute_get_mode(NSString *current_handler_name) {
 }
 
 int execute_set_mode(NSString *target, NSMutableDictionary *handlers, NSString *current_handler_name) {
-    NSString *target_handler_name = target;
-
-    if ([target_handler_name isEqual:current_handler_name]) {
+    if ([target isEqual:current_handler_name]) {
       printf("%s is already set as the default HTTP handler\n", [target UTF8String]);
 
       return 1;
 
     } else {
-	NSString *target_handler = handlers[target_handler_name];
+	NSString *target_handler = handlers[target];
 
 	if (target_handler != nil) {
 	    // Set new HTTP handler (HTTP and HTTPS separately)
