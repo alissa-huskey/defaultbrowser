@@ -6,9 +6,10 @@
 #import <Foundation/Foundation.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-#define CASE(str)                       if ([__s__ isEqualToString:(str)])
+#define CASE(...)                       if ([__VA_ARGS__ containsObject:__s__])
 #define SWITCH(s)                       for (NSString *__s__ = (s); ; )
 #define DEFAULT
+
 
 NSString* app_name_from_bundle_id(NSString *app_bundle_id) {
     return [[app_bundle_id componentsSeparatedByString:@"."] lastObject];
@@ -68,6 +69,9 @@ int execute_set_mode(const char *target, NSMutableDictionary *handlers, NSString
 
     if ([target_handler_name isEqual:current_handler_name]) {
       printf("%s is already set as the default HTTP handler\n", target);
+
+      return 1;
+
     } else {
 	NSString *target_handler = handlers[target_handler_name];
 
@@ -83,6 +87,25 @@ int execute_set_mode(const char *target, NSMutableDictionary *handlers, NSString
     }
 
     return 0;
+}
+
+int execute_help_mode() {
+
+	NSString *usage = @"\nusage:\n\
+  defaultbrowser\n\
+  defaultbrower help\n\
+  defaultbrower get\n\
+  defaultbrower list\n\
+  defaultbrowser set <browser>\n\
+options:\n\
+  -h, help          show this scre\n\
+  -g, get           outputs the current browser on\n\
+  -ls, list         list all available HTTP handlers and show the current setting (default if no arguments are passe\n\
+  <browser>     set the default browser to <browse\n\
+";
+
+	printf("%s\n", [usage UTF8String]);
+	return 0;
 }
 
 int main(int argc, const char *argv[]) {
@@ -104,12 +127,16 @@ int main(int argc, const char *argv[]) {
         NSString *current_handler_name = get_current_http_handler();
 
 	SWITCH( mode ) {
-		CASE (@"list") {
+		CASE (@[ @"list", @"-ls" ]) {
 		    code = execute_list_mode(handlers, current_handler_name);
 		    break;
 		}
-		CASE (@"get") {
+		CASE ( @[ @"get", @"-g" ] ) {
 		    code = execute_get_mode(current_handler_name);
+		    break;
+		}
+		CASE (@[ @"help" ]) {
+		    code = execute_help_mode();
 		    break;
 		}
 		DEFAULT {
