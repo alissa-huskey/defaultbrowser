@@ -26,13 +26,13 @@ Usage
   defaultbrower help
   defaultbrower get
   defaultbrower list
-  defaultbrowser <browser>
+  defaultbrowser set <browser>
 
 options:
   -h, help          show this screen
   -g, get           outputs the current browser only
   -ls, list         list all available HTTP handlers and show the current setting (default if no arguments are passed)
-  <browser>         set the default browser to <browser>
+  set <browser>     set the default browser to <browser>
 ```
 
 Examples

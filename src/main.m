@@ -64,11 +64,11 @@ int execute_get_mode(NSString *current_handler_name) {
     return 0;
 }
 
-int execute_set_mode(const char *target, NSMutableDictionary *handlers, NSString *current_handler_name) {
-    NSString *target_handler_name = [NSString stringWithUTF8String:target];
+int execute_set_mode(NSString *target, NSMutableDictionary *handlers, NSString *current_handler_name) {
+    NSString *target_handler_name = target;
 
     if ([target_handler_name isEqual:current_handler_name]) {
-      printf("%s is already set as the default HTTP handler\n", target);
+      printf("%s is already set as the default HTTP handler\n", [target UTF8String]);
 
       return 1;
 
@@ -80,7 +80,7 @@ int execute_set_mode(const char *target, NSMutableDictionary *handlers, NSString
 	    set_default_handler(@"http", target_handler);
 	    set_default_handler(@"https", target_handler);
 	} else {
-	    printf("%s is not available as an HTTP handler\n", target);
+	    printf("%s is not available as an HTTP handler\n", [target UTF8String]);
 
 	    return 1;
 	}
@@ -101,7 +101,7 @@ options:\n\
   -h, help          show this scre\n\
   -g, get           outputs the current browser on\n\
   -ls, list         list all available HTTP handlers and show the current setting (default if no arguments are passe\n\
-  <browser>     set the default browser to <browse\n\
+  set <browser>     set the default browser to <browse\n\
 ";
 
 	printf("%s\n", [usage UTF8String]);
@@ -109,14 +109,23 @@ options:\n\
 }
 
 int main(int argc, const char *argv[]) {
-    const char *target = (argc == 1) ? '\0' : argv[1];
-    int code;
+    NSString *target;
     NSString *mode;
+    int rtncode;
 
-    if (target == '\0') {
-	    mode = [NSString stringWithUTF8String:"list"];
-    } else {
-	    mode = [NSString stringWithUTF8String:target];
+    switch( argc ) {
+	    case 1: // if no argument is passed, print out the list
+		    target = @"none";
+		    mode = @"list";
+		    break;
+	    case 2: // if one argument is passed, let's say it's the mode
+		    target = @"none";
+		    mode = [NSString stringWithUTF8String:argv[1]];
+		    break;
+	    case 3: // the only current two argument mode is set <browser>
+		    target = [NSString stringWithUTF8String:argv[2]];
+		    mode = [NSString stringWithUTF8String:argv[1]];
+		    break;
     }
 
     @autoreleasepool {
@@ -128,23 +137,28 @@ int main(int argc, const char *argv[]) {
 
 	SWITCH( mode ) {
 		CASE (@[ @"list", @"-ls" ]) {
-		    code = execute_list_mode(handlers, current_handler_name);
+		    rtncode = execute_list_mode(handlers, current_handler_name);
 		    break;
 		}
 		CASE ( @[ @"get", @"-g" ] ) {
-		    code = execute_get_mode(current_handler_name);
+		    rtncode = execute_get_mode(current_handler_name);
 		    break;
 		}
 		CASE (@[ @"help" ]) {
-		    code = execute_help_mode();
+		    rtncode = execute_help_mode();
+		    break;
+		}
+		CASE (@[ @"set" ]) {
+		    rtncode = execute_set_mode(target, handlers, current_handler_name);
 		    break;
 		}
 		DEFAULT {
-		    code = execute_set_mode(target, handlers, current_handler_name);
+		    printf("%s command not recognized\n", [mode UTF8String]);
+		    rtncode = 1;
 		    break;
 		}
 	}
     }
 
-    return code;
+    return rtncode;
 }
