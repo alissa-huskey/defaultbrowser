@@ -11,6 +11,7 @@
 #define DEFAULT
 
 #define COMMAND_DEFAULT     @"help"
+BOOL QUIET = NO;
 
 void usage() {
 
@@ -38,6 +39,9 @@ void error(NSString *message) {
 }
 
 void info(NSString *message) {
+  if(QUIET) {
+    return;
+  }
   printf("\e[0;34m>\e[0m %s\n", [message UTF8String]);
 }
 
@@ -185,14 +189,13 @@ int execute_help_command() {
 int main(int argc, const char *argv[]) {
     NSString *target;
     NSString *command;
-    BOOL quiet = NO;
     int rtncode;
 
     for( int i = 1; i < argc; i++) {
       NSString *arg = [NSString stringWithUTF8String:argv[i]];
       SWITCH( arg ) {
         CASE (@[ @"-q", @"--quiet" ]) {
-          quiet = YES;
+          QUIET = YES;
           break;
         }
         CASE (@[ @"list", @"-ls" ]) {
