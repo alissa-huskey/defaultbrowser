@@ -69,3 +69,9 @@ License
 -------
 
 MIT
+
+
+Credits
+-------
+
+Forked from [kerma/defaultbrowser](https://github.com/kerma/defaultbrowser)
