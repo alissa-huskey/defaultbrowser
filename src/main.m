@@ -6,38 +6,126 @@
 #import <Foundation/Foundation.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-#define CASE(...)                       if ([__VA_ARGS__ containsObject:__s__])
-#define SWITCH(s)                       for (NSString *__s__ = (s); ; )
+#define CASE(...)           if ([__VA_ARGS__ containsObject:__s__])
+#define SWITCH(s)           for (NSString *__s__ = (s); ; )
 #define DEFAULT
 
+#define COMMAND_DEFAULT     @"help"
 
-NSString* app_name_from_bundle_id(NSString *app_bundle_id) {
-    return [[app_bundle_id componentsSeparatedByString:@"."] lastObject];
+void usage() {
+
+	NSString *usage = @"\
+COMMANDS:\n\
+  -ls, list         list all available HTTP handlers and show the current setting\n\
+  -g,  get          print the current browser\n\
+  -h, help          show this screen\n\
+  set <BROWSER>     set the default browser to <BROWSER>\n\
+  \n\
+OPTIONS:\n\
+  -q, --quiet       quiet mode \n\
+\n\
+EXAMPLES:\n\
+  defaultbrowser set chrome\n\
+  defaultbrowser set \"google chrome\"\n\
+  defaultbrowser set com.google.chrome\n\
+";
+
+	printf("%s\n", [usage UTF8String]);
 }
 
-NSMutableDictionary* get_http_handlers() {
-    NSArray *handlers =
+void error(NSString *message) {
+  printf("\e[0;31m[ERROR]\e[0m %s\n", [message UTF8String]);
+}
+
+void info(NSString *message) {
+  printf("\e[0;34m>\e[0m %s\n", [message UTF8String]);
+}
+
+NSBundle* getBundle(NSString *id) {
+  NSArray *urls = CFBridgingRelease(LSCopyApplicationURLsForBundleIdentifier((__bridge CFStringRef _Nonnull)(id), NULL));
+  if (urls == nil || [urls count] == 0) {
+    return nil;
+  }
+  NSBundle *bundle = [NSBundle bundleWithURL:urls[0]];
+  return bundle;
+}
+
+NSString* getBrowserName(NSBundle* bundle) {
+  NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"^/Applications/(.+?).app" options:0 error:nil];
+  NSString *path = [bundle bundlePath];
+  NSTextCheckingResult *match = [regex firstMatchInString:path
+                                       options:0
+                                       range:NSMakeRange(0, [path length])];
+
+  if(!match) {
+    error([NSString stringWithFormat:@"unable to parse path: '%s'", [path UTF8String]]);
+  }
+
+  NSRange needleRange = [match rangeAtIndex: 1];
+  NSString *name = [path substringWithRange:needleRange];
+
+  return name;
+}
+
+NSString* getBrowserNameFromID(NSString* id) {
+  NSBundle *bundle = getBundle(id);
+  if(!bundle) {
+    return nil;
+  }
+  NSString *name = getBrowserName(bundle);
+  return name;
+}
+
+NSMutableDictionary* getBrowsers() {
+    NSArray *appIDs =
       (__bridge NSArray *) LSCopyAllHandlersForURLScheme(
         (__bridge CFStringRef) @"http"
       );
 
     NSMutableDictionary *dict = [NSMutableDictionary dictionary];
 
-    for (int i = 0; i < [handlers count]; i++) {
-        NSString *handler = [handlers objectAtIndex:i];
-        dict[[app_name_from_bundle_id(handler) lowercaseString]] = handler;
+    for (int i = 0; i < [appIDs count]; i++) {
+        NSString *appID = [appIDs objectAtIndex:i];
+        NSBundle *bundle = getBundle(appID);
+        if(!bundle) {
+          continue;
+        }
+        dict[appID] = getBrowserName(bundle);
     }
 
     return dict;
 }
 
-NSString* get_current_http_handler() {
-    NSString *handler =
+NSMutableDictionary* getHandlers() {
+  NSMutableDictionary *browsers = getBrowsers();
+  NSMutableDictionary *handlers = [NSMutableDictionary dictionary];
+
+  for (NSString *id in browsers) {
+    NSArray *parts = [browsers[id] componentsSeparatedByString:@" "];
+    handlers[[id lowercaseString]] = id;
+    handlers[[browsers[id] lowercaseString]] = id;
+
+    for (NSString *part in parts) {
+      part = [part lowercaseString];
+      if(handlers[part]) {
+        // if there are any duplicate words, both lose
+        handlers[part] = nil;
+      } else {
+        handlers[part] = id;
+      }
+    }
+  }
+
+  return handlers;
+}
+
+NSString* getCurrentBrowser() {
+    NSString *id =
         (__bridge NSString *) LSCopyDefaultHandlerForURLScheme(
             (__bridge CFStringRef) @"http"
         );
 
-    return app_name_from_bundle_id(handler);
+    return id;
 }
 
 void set_default_handler(NSString *url_scheme, NSString *handler) {
@@ -47,115 +135,125 @@ void set_default_handler(NSString *url_scheme, NSString *handler) {
     );
 }
 
-int execute_list_mode(NSMutableDictionary *handlers, NSString *current_handler_name) {
-    // List all HTTP handlers, marking the current one with a star
-    for (NSString *key in handlers) {
-        char *mark = [key isEqual:current_handler_name] ? "* " : "  ";
-            printf("%s%s\n", mark, [key UTF8String]);
-        }
+int execute_list_command(NSMutableDictionary *browsers, NSString *current_browser_id) {
+
+    for (NSString *id in browsers) {
+      char *mark = [id isEqual:current_browser_id] ? "* " : "  ";
+          printf("%s%s\n", mark, [browsers[id] UTF8String]);
+      }
 
     return 0;
 }
 
-int execute_get_mode(NSString *current_handler_name) {
-    // Just ouput the current setting
-    printf("%s\n", [current_handler_name UTF8String]);
+int execute_get_command(NSString *current_browser_id) {
+  NSString *name = getBrowserNameFromID(current_browser_id);
+  printf("%s\n", [name UTF8String]);
 
-    return 0;
+  return 0;
 }
 
-int execute_set_mode(NSString *target, NSMutableDictionary *handlers, NSString *current_handler_name) {
-    if ([target isEqual:current_handler_name]) {
-      printf("%s is already set as the default HTTP handler\n", [target UTF8String]);
+int execute_set_command(NSString *target, NSMutableDictionary *handlers, NSString *current_browser_id) {
+    NSString *target_handler = handlers[[[target lowercaseString] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
 
+    if(!target_handler) {
+
+      error([NSString stringWithFormat:@"invalid browser: '%s'", [target UTF8String]]);
       return 1;
 
+    } else if ([target_handler isEqual:current_browser_id]) {
+
+      info([NSString stringWithFormat:@"already set to: %s", [target_handler UTF8String]]);
+      return 0;
+
     } else {
-	NSString *target_handler = handlers[target];
 
-	if (target_handler != nil) {
-	    // Set new HTTP handler (HTTP and HTTPS separately)
-	    set_default_handler(@"http", target_handler);
-	    set_default_handler(@"https", target_handler);
-	} else {
-	    printf("%s is not available as an HTTP handler\n", [target UTF8String]);
-
-	    return 1;
-	}
+      info([NSString stringWithFormat:@"setting to: '%s'", [target_handler UTF8String]]);
     }
+
+    set_default_handler(@"http", target_handler);
+    set_default_handler(@"https", target_handler);
 
     return 0;
 }
 
-int execute_help_mode() {
-
-	NSString *usage = @"\nusage:\n\
-  defaultbrowser\n\
-  defaultbrower help\n\
-  defaultbrower get\n\
-  defaultbrower list\n\
-  defaultbrowser set <browser>\n\
-options:\n\
-  -h, help          show this scre\n\
-  -g, get           outputs the current browser on\n\
-  -ls, list         list all available HTTP handlers and show the current setting (default if no arguments are passe\n\
-  set <browser>     set the default browser to <browse\n\
-";
-
-	printf("%s\n", [usage UTF8String]);
-	return 0;
+int execute_help_command() {
+  printf("defaultbrowser - manage the default browser setting\n\n");
+  usage();
+  return 0;
 }
 
 int main(int argc, const char *argv[]) {
     NSString *target;
-    NSString *mode;
+    NSString *command;
+    BOOL quiet = NO;
     int rtncode;
 
-    switch( argc ) {
-	    case 1: // if no argument is passed, print out the list
-		    target = @"none";
-		    mode = @"list";
-		    break;
-	    case 2: // if one argument is passed, let's say it's the mode
-		    target = @"none";
-		    mode = [NSString stringWithUTF8String:argv[1]];
-		    break;
-	    case 3: // the only current two argument mode is set <browser>
-		    target = [NSString stringWithUTF8String:argv[2]];
-		    mode = [NSString stringWithUTF8String:argv[1]];
-		    break;
+    for( int i = 1; i < argc; i++) {
+      NSString *arg = [NSString stringWithUTF8String:argv[i]];
+      SWITCH( arg ) {
+        CASE (@[ @"-q", @"--quiet" ]) {
+          quiet = YES;
+          break;
+        }
+        CASE (@[ @"list", @"-ls" ]) {
+          command = @"list";
+          break;
+        }
+        CASE (@[ @"get", @"-g" ]) {
+          command = @"get";
+          break;
+        }
+        CASE (@[ @"set", @"-s" ]) {
+          command = @"set";
+          break;
+        }
+        CASE (@[ @"help" ]) {
+          command = @"help";
+          break;
+        }
+        DEFAULT {
+          if(command) {
+            target = arg;
+          }
+          break;
+        }
+      }
+    }
+
+    if(!command) {
+      command = COMMAND_DEFAULT;
     }
 
     @autoreleasepool {
         // Get all HTTP handlers
-        NSMutableDictionary *handlers = get_http_handlers();
+        NSMutableDictionary *handlers = getHandlers();
+        NSMutableDictionary *browsers = getBrowsers();
 
         // Get current HTTP handler
-        NSString *current_handler_name = get_current_http_handler();
+        NSString *current_browser_id = getCurrentBrowser();
 
-	SWITCH( mode ) {
-		CASE (@[ @"list", @"-ls" ]) {
-		    rtncode = execute_list_mode(handlers, current_handler_name);
-		    break;
-		}
-		CASE ( @[ @"get", @"-g" ] ) {
-		    rtncode = execute_get_mode(current_handler_name);
-		    break;
-		}
-		CASE (@[ @"help" ]) {
-		    rtncode = execute_help_mode();
-		    break;
-		}
-		CASE (@[ @"set" ]) {
-		    rtncode = execute_set_mode(target, handlers, current_handler_name);
-		    break;
-		}
-		DEFAULT {
-		    printf("%s command not recognized\n", [mode UTF8String]);
-		    rtncode = 1;
-		    break;
-		}
-	}
+        SWITCH( command ) {
+            CASE (@[ @"list" ]) {
+                rtncode = execute_list_command(browsers, current_browser_id);
+                break;
+            }
+            CASE (@[ @"get" ]) {
+                rtncode = execute_get_command(current_browser_id);
+                break;
+            }
+            CASE (@[ @"help" ]) {
+                rtncode = execute_help_command();
+                break;
+            }
+            CASE (@[ @"set" ]) {
+                rtncode = execute_set_command(target, handlers, current_browser_id);
+                break;
+            }
+            DEFAULT {
+                rtncode = 1;
+                break;
+            }
+        }
     }
 
     return rtncode;

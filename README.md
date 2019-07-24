@@ -22,17 +22,16 @@ Usage
 -----
 
 ```
-  defaultbrowser
-  defaultbrower help
-  defaultbrower get
-  defaultbrower list
-  defaultbrowser set <browser>
-
-options:
+  COMMANDS:
+  -ls, list         list all available HTTP handlers and show the current setting
+  -g,  get          print the current browser
   -h, help          show this screen
-  -g, get           outputs the current browser only
-  -ls, list         list all available HTTP handlers and show the current setting (default if no arguments are passed)
-  set <browser>     set the default browser to <browser>
+  set <BROWSER>     set the default browser to <BROWSER>
+
+EXAMPLES:
+  defaultbrowser set chrome
+  defaultbrowser set "google chrome"
+  defaultbrowser set com.google.chrome
 ```
 
 Examples
